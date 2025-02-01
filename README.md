@@ -88,10 +88,155 @@ O fator de qualidade utiliza um parâmetro extra, $\Psi$, que é o ângulo dos p
 
 ![polos](https://github.com/user-attachments/assets/23c9d8c1-e690-4465-84cd-1d977589dadd)
 
+O número de fatores de qualidade depende da ordem do filtro. Devido à estabilidade, são apenas escolhidos os polos do semi-plano esquerdo complexo. 
 
+De acordo com o gabarito escolhido na seção anterior, os parâmetros são calculados com o código do arquivo Calculo_parametros_iniciais.mat, mostrado abaixo.
 
+```matlab
+% Especificações de entrada
+w_s = 5;
+w_p = 1;
+alpha_min = 4;
+alpha_max = 0.05;
 
+% Cálculo da ordem do filtro
+n = log10((10^(alpha_min/10)-1)/(10^(alpha_max/10)-1))/(2*log10(w_s/w_p));
+n_inteiro = ceil(n);
+% Cálculo da frequência de corte
+w_o1 = w_s/(10^(alpha_min/10)-1)^(1/(2*n_inteiro));
+w_o2 = w_p/(10^(alpha_max/10)-1)^(1/(2*n_inteiro));
+```
 
+Resultando em:
+
+$$
+\begin{align*}
+    n &= 1,5135 =2 \text{ (arredonda para cima)} \\
+    \omega_o &= 4,5091 
+\end{align*}
+$$
+
+Como $n$ é par, terão polos apenas em $\Psi=\pm45^\circ$. Com isso o valor do fator de qualidade calculado é $Q=0,71$.
+
+### 2.3 Cálculo da função de transferência
+
+Com os valores de frequência de corte ($\omega_o$) e fator de qualidade ($Q$), é possível calcular a função de transferência utilizando a equação dada na introdução:
+
+$$
+\begin{equation*}
+    H(s)=\frac{20,3320}{s^2+6,3509s+20,3320}
+\end{equation*}
+$$
+
+A função de transferência é utilizada no Simulink, como mostrado na figura abaixo. 
+
+![simulink](https://github.com/user-attachments/assets/70fbc1b0-f20b-4c39-b293-10faf5b26f5a)
+
+O gráfico resultante fica assim:
+
+![sinal filtrado](https://github.com/user-attachments/assets/89fc4044-15dd-4030-9a3e-6508d1cecca5)
+
+#### Retirando o offset do sinal
+
+Através da análise do gráfico filtrado, foi medido o off-set do sistema igual a $-0,6445$, conforme mostrado na figura abaixo.
+
+![offset](https://github.com/user-attachments/assets/54ade20c-2799-43f5-a1c8-0af7a09db270)
+
+E sua retirada é feita com:
+
+```matlab
+% Dados do sistema
+load('aceleracao.mat')
+T0=1/51200; % Período (incremento de tempo)
+Fs=1/T0; % Frequência em Hz
+L=length(acc);
+t = ((0:L-1)*T0)'; % Duração total em segundos
+
+s = tf('s');
+H = w_o1^2/(s^2+(w_o1/Q)*s+w_o1^2);
+
+% Combinar lado a lado em uma matriz com 2 colunas
+aceleracao = [t, acc]; % Concatenação horizontal
+
+x = aceleracao(:, 1);
+y = aceleracao(:, 2);
+
+% Simular a saída da função de transferência
+output_signal = lsim(H, y, x);
+
+% Remover o offset
+offset = -0.644; % Valor do offset
+output_signal_corrigido = output_signal - offset;
+```
+
+Com a aceleração filtrada por completo, podem ser determinados os valores de velocidade e deslocamento. Partindo da informação de que o carro iniciou a tomada de dados parado, a velocidade e deslocamento iniciais são zero. Como a velocidade é a integral da aceleração e o deslocamento é a integral da velocidade, a velocidade e deslocamento são determinadas no código exibido abaixo, do arquivo Calculo_parametros_iniciais. 
+
+```matlab
+v0 = 0; % Condição inicial da velocidade
+s0 = 0; % Condição inicial do deslocamento
+% Vetor de velocidade
+v = cumtrapz(x, output_signal_corrigido);
+% Vetor de deslocamento
+s = cumtrapz(x, v);
+
+% Ajustar com as condições iniciais
+v = v + v0;
+s = s + s0;
+
+% Plotar os resultados
+figure;
+subplot(3,1,1);
+plot(x, output_signal_corrigido, 'r', 'LineWidth', 1.5);
+title('Aceleração');
+xlabel('Tempo (s)');
+ylabel('Aceleração (m/s^2)');
+grid on;
+
+subplot(3,1,2);
+plot(x, v, 'b', 'LineWidth', 1.5);
+title('Velocidade');
+xlabel('Tempo (s)');
+ylabel('Velocidade (m/s)');
+grid on;
+
+subplot(3,1,3);
+plot(x, s, 'g', 'LineWidth', 1.5);
+title('Deslocamento');
+xlabel('Tempo (s)');
+ylabel('Deslocamento (m)');
+grid on;
+```
+
+Os resultados de aceleração, velocidade e deslocamento são:
+
+![plot final](https://github.com/user-attachments/assets/a0f4fb20-d333-4e67-8921-52da4db7a0a3)
+
+## 3. Transformação em filtro digital
+
+O projeto do filtro digital pode ser feito através da discretização de um filtro analógico, ou pode ser projetado do zero, começando pelo gabarito do filtro já em tempo discreto. A discretização escolhida é feita no Matlab através da transformação bilinear, através da função \textit{c2d} com o método \textit{'tustin'}. O código utilizado, em cima do código do filtro analógico, está no arquivo digitalizacao.mat, e mostrado abaixo. 
+
+```matlab
+Ts=1/51200; % Período (incremento de tempo)
+% Função de transferência contínua
+s = tf('s');
+H_cont = w_o1^2/(s^2+(w_o1/Q)*s+w_o1^2);
+
+% Transformação bilinear (Tustin)
+H_disc = c2d(H_cont, Ts, 'tustin');
+% Simular a saída da função de transferência discreta
+output_signal = lsim(H_disc, y, x);
+% Remover o offset
+output_signal_disc = output_signal - offset;
+```
+
+A comparação entre o filtro analógico e o filtro digital, aplicados no mesmo sinal do acelerômetro, é mostrada na figura abaixo.
+
+![filtro digital](https://github.com/user-attachments/assets/25cf49df-b601-48a8-9f2a-7d8cce44c48b)
+
+# Referências
+
+[1] José Luiz da Silva Neto. Notas de aula de medidas elétricas e instrumentação, 2024. 
+[2] M. E. Van Valkenburg. Analog Filter Design. Holt, Rinehart and Winston, New York, 1982.
 
 
 

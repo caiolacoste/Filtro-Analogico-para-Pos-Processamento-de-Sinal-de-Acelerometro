@@ -236,6 +236,7 @@ A comparação entre o filtro analógico e o filtro digital, aplicados no mesmo 
 # Referências
 
 [1] José Luiz da Silva Neto. Notas de aula de medidas elétricas e instrumentação, 2024. 
+
 [2] M. E. Van Valkenburg. Analog Filter Design. Holt, Rinehart and Winston, New York, 1982.
 
 

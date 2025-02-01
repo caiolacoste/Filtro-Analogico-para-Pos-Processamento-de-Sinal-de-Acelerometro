@@ -1,4 +1,4 @@
-# Filtro-Analogico-para-Pos-Processamento-de-Sinal-de-Acelerometro
+# Filtro Analógico para Pós-Processamento de Sinal de Acelerômetro
 
 ## 1. Introdução
 
